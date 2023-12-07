@@ -71,7 +71,7 @@ def main(cfg: DictConfig):
     fix_random_seeds(cfg.seed)
     cudnn.benchmark = True
 
-    output_dir = Path(cfg.output_dir, cfg.experiment_name, run_id)
+    output_dir = Path(cfg.output_dir, cfg.experiment_name)
     snapshot_dir = Path(output_dir, "snapshots")
     features_dir = Path(output_dir, "features")
     if not cfg.resume and is_main_process():
