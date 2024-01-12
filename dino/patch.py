@@ -71,7 +71,7 @@ def main(cfg: DictConfig):
     fix_random_seeds(cfg.seed)
     cudnn.benchmark = True
 
-    output_dir = Path(cfg.output_dir, cfg.experiment_name)
+    output_dir = Path(cfg.output_dir)
     snapshot_dir = Path(output_dir, "snapshots")
     features_dir = Path(output_dir, "features")
     if not cfg.resume and is_main_process():
@@ -92,15 +92,15 @@ def main(cfg: DictConfig):
     # ============ preparing tuning data ============
     if is_main_process() and cfg.early_stopping.tune_every:
         # only do it from master rank as tuning is not being run distributed for now
-        train_df = pd.read_csv(cfg.early_stopping.downstream.train_csv)
+        query_df = pd.read_csv(cfg.early_stopping.downstream.query_csv)
         test_df = pd.read_csv(cfg.early_stopping.downstream.test_csv)
 
         num_workers = min(mp.cpu_count(), cfg.early_stopping.downstream.num_workers)
         if "SLURM_JOB_CPUS_PER_NODE" in os.environ:
             num_workers = min(num_workers, int(os.environ["SLURM_JOB_CPUS_PER_NODE"]))
 
-        downstream_train_loader, downstream_test_loader = prepare_data(
-            train_df,
+        downstream_query_loader, downstream_test_loader = prepare_data(
+            query_df,
             test_df,
             cfg.early_stopping.downstream.batch_size_per_gpu,
             False,
@@ -108,7 +108,7 @@ def main(cfg: DictConfig):
             cfg.early_stopping.downstream.label_name,
         )
         print(
-            f"Tuning data loaded with {len(downstream_train_loader.dataset)} train patches and {len(downstream_test_loader.dataset)} test patches."
+            f"Tuning data loaded with {len(downstream_query_loader.dataset)} query patches and {len(downstream_test_loader.dataset)} test patches."
         )
 
     transform = PatchDataAugmentationDINO(
@@ -126,10 +126,13 @@ def main(cfg: DictConfig):
         print(f"Pretraining data loaded in {total_time_str} ({len(dataset)} patches)")
 
     if cfg.training.pct:
-        print(f"Pre-training on {cfg.training.pct*100}% of the data")
         nsample = int(cfg.training.pct * len(dataset))
         idxs = random.sample(range(len(dataset)), k=nsample)
         dataset = torch.utils.data.Subset(dataset, idxs)
+        if is_main_process():
+            print(
+                f"Pretraining on {cfg.training.pct*100}% of the data: {len(dataset):,d} samples\n"
+            )
 
     if distributed:
         sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)
@@ -367,10 +370,10 @@ def main(cfg: DictConfig):
                 and is_main_process()
             ):
                 tune_results = tune_one_epoch(
-                    epoch + 1,
+                    epoch,
                     student,
                     teacher_without_ddp,
-                    downstream_train_loader,
+                    downstream_query_loader,
                     downstream_test_loader,
                     features_dir,
                     cfg.model.arch,

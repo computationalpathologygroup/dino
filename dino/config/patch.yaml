@@ -1,7 +1,6 @@
 data_dir: '/path/to/patch_pretraining'
 
 output_dir: 'output'
-experiment_name: 'patch'
 
 seed: 0
 start_from_checkpoint:
@@ -38,7 +37,7 @@ early_stopping:
   min_epoch: 30
   save_every: 5 # save checkpoint every x epochs
   downstream:
-    train_csv: ''
+    query_csv: ''
     test_csv: ''
     label_name: 'label'
     batch_size_per_gpu: 8
@@ -78,8 +77,8 @@ wandb:
   enable: False
   project: ''
   username: ''
-  exp_name: '${experiment_name}'
-  tags: ['dino', 'patch', '${model.arch}']
+  exp_name: 'patch'
+  tags: ['dino', '${wandb.exp_name}', '${model.arch}']
   dir: '/home/user'
   group:
   to_log: ['loss']

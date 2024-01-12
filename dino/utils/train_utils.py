@@ -73,11 +73,10 @@ def train_one_epoch(
 
             # student update
             optimizer.zero_grad()
-            param_norms = None
             if fp16_scaler is None:
                 loss.backward()
                 if clip_grad:
-                    param_norms = clip_gradients(student, clip_grad)
+                    _ = clip_gradients(student, clip_grad)
                 cancel_gradients_last_layer(epoch, student, freeze_last_layer)
                 optimizer.step()
             else:
@@ -86,7 +85,7 @@ def train_one_epoch(
                     fp16_scaler.unscale_(
                         optimizer
                     )  # unscale the gradients of optimizer's assigned params in-place
-                    param_norms = clip_gradients(student, clip_grad)
+                    _ = clip_gradients(student, clip_grad)
                 cancel_gradients_last_layer(epoch, student, freeze_last_layer)
                 fp16_scaler.step(optimizer)
                 fp16_scaler.update()
@@ -120,7 +119,7 @@ def tune_one_epoch(
     epoch,
     student: nn.Module,
     teacher: nn.Module,
-    train_dataloader,
+    query_dataloader,
     test_dataloader,
     features_dir: Path,
     arch: str,
@@ -148,54 +147,54 @@ def tune_one_epoch(
     teacher_model.eval()
 
     # ============ extract student features ============
-    tqdm.tqdm.write("Extracting features for train set...")
-    train_features, train_labels = extract_multiple_features(
-        student_model, teacher_model, train_dataloader, distributed, use_cuda
+    tqdm.tqdm.write("Extracting features for query set...")
+    query_features, query_labels = extract_multiple_features(
+        student_model, teacher_model, query_dataloader, distributed, use_cuda
     )
     tqdm.tqdm.write("Extracting features for test set...")
     test_features, test_labels = extract_multiple_features(
         student_model, teacher_model, test_dataloader, distributed, use_cuda
     )
 
-    teacher_train_features, teacher_test_features = (
-        train_features["teacher"],
+    teacher_query_features, teacher_test_features = (
+        query_features["teacher"],
         test_features["teacher"],
     )
-    student_train_features, student_test_features = (
-        train_features["student"],
+    student_query_features, student_test_features = (
+        query_features["student"],
         test_features["student"],
     )
 
     # save features and labels
     if save_features and is_main_process():
-        for name, feats in train_features.items():
-            torch.save(feats.cpu(), Path(features_dir, f"{name}_train_feat.pth"))
-        for name, feats in train_features.items():
+        for name, feats in query_features.items():
+            torch.save(feats.cpu(), Path(features_dir, f"{name}_query_feat.pth"))
+        for name, feats in query_features.items():
             torch.save(feats.cpu(), Path(features_dir, f"{name}_test_feat.pth"))
-        torch.save(train_labels.cpu(), Path(features_dir, "train_labels.pth"))
+        torch.save(query_labels.cpu(), Path(features_dir, "query_labels.pth"))
         torch.save(test_labels.cpu(), Path(features_dir, "test_labels.pth"))
 
     results = defaultdict(dict)
     if is_main_process():
-        assert len(torch.unique(train_labels)) == len(
+        assert len(torch.unique(query_labels)) == len(
             torch.unique(test_labels)
-        ), "train & test dataset have different number of classes!"
-        num_classes = len(torch.unique(train_labels))
+        ), "query & test dataset have different number of classes!"
+        num_classes = len(torch.unique(query_labels))
         if use_cuda:
-            teacher_train_features, teacher_test_features = (
-                teacher_train_features.cuda(),
+            teacher_query_features, teacher_test_features = (
+                teacher_query_features.cuda(),
                 teacher_test_features.cuda(),
             )
-            student_train_features, student_test_features = (
-                student_train_features.cuda(),
+            student_query_features, student_test_features = (
+                student_query_features.cuda(),
                 student_test_features.cuda(),
             )
-            train_labels, test_labels = train_labels.cuda(), test_labels.cuda()
+            query_labels, test_labels = query_labels.cuda(), test_labels.cuda()
 
         tqdm.tqdm.write("Features are ready!\nStarting kNN classification.")
         teacher_acc, teacher_auc = knn_classifier(
-            teacher_train_features,
-            train_labels,
+            teacher_query_features,
+            query_labels,
             teacher_test_features,
             test_labels,
             k,
@@ -203,8 +202,8 @@ def tune_one_epoch(
             num_classes,
         )
         student_acc, student_auc = knn_classifier(
-            student_train_features,
-            train_labels,
+            student_query_features,
+            query_labels,
             student_test_features,
             test_labels,
             k,

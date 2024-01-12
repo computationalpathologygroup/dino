@@ -1,7 +1,6 @@
 data_dir: '/path/to/region_pretraining'
 
 output_dir: 'output'
-experiment_name: 'region'
 
 fold: 0
 
@@ -58,8 +57,8 @@ wandb:
   enable: False
   project: ''
   username: ''
-  exp_name: '${experiment_name}'
-  tags: ['dino', 'region', '${model.arch}']
+  exp_name: 'region'
+  tags: ['dino', '${wandb.exp_name}', '${model.arch}']
   dir: '/home/user'
   group:
   to_log: ['loss']

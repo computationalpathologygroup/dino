@@ -3,7 +3,7 @@ repos:
     rev: '6.1.0'  # Use the latest commit on the master branch
     hooks:
       - id: flake8
-        args: ['--ignore=E501,F401,W503']
+        args: ['--ignore=E501,F401,W503,E203']
   - repo: https://github.com/psf/black
     rev: '23.11.0'  # Use the latest commit on the master branch
     hooks:
