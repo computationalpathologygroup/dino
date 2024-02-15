@@ -1,0 +1,10 @@
+numpy
+pandas
+pillow
+gdown
+einops
+matplotlib
+tqdm
+hydra-core==1.2.0
+opencv-python==4.4.0.46
+dataclasses
